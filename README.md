@@ -93,3 +93,8 @@ vector_store/chroma_index/
 
 ---
 
+### 📝 Notes
+
+* This task sets up the foundation for **Task 3: Retrieval + LLM Q\&A**.
+* The indexed vector store enables similarity-based retrieval during inference.
+
