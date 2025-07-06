@@ -18,6 +18,7 @@ This task focuses on understanding and preparing the CFPB consumer complaint dat
   - `Credit card`, `Personal loan`, `Buy Now, Pay Later (BNPL)`, `Savings account`, and `Money transfers`
 - Visualized excluded product categories to determine their potential future value in RAG pipelines.
 
+
 ### 3. Applied EDA
 - Analyzed distribution of consumer complaint narrative lengths to inform future chunking and embedding strategies.
 - Quantified narrative coverage:
