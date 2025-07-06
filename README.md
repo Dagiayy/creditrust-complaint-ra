@@ -1,85 +1,95 @@
-# Task 1: Exploratory Data Analysis and Data Preprocessing
 
-## 📌 Objective
+## 🧠 Task 2: Text Chunking, Embedding, and Vector Store Indexing
 
-This task focuses on understanding and preparing the CFPB consumer complaint dataset for integration into a Retrieval-Augmented Generation (RAG) system. It blends **domain-specific analysis** (focused on business relevance) with **applied technical EDA** (focused on data quality and ML-readiness) to ensure the dataset aligns with both stakeholder goals and downstream model requirements.
+This task prepares the cleaned consumer complaint narratives for **semantic search and retrieval-augmented generation (RAG)** by:
 
----
-
-## 🧪 Steps Performed
-
-### 1. Initial Data Loading
-- Loaded the full CFPB complaint dataset (`complaints.csv`) containing ~9.6 million records.
-- Identified key structural properties including column names, missing values, and basic statistics.
-
-### 2. Domain-Specific EDA
-- Inspected and ranked the top 20 most frequent product types.
-- Identified top excluded product categories when filtering to a strict product list of 5 business-prioritized products:
-  - `Credit card`, `Personal loan`, `Buy Now, Pay Later (BNPL)`, `Savings account`, and `Money transfers`
-- Visualized excluded product categories to determine their potential future value in RAG pipelines.
-
-### 3. Applied EDA
-- Analyzed distribution of consumer complaint narrative lengths to inform future chunking and embedding strategies.
-- Quantified narrative coverage:
-  - **With narratives:** ~3M records
-  - **Without narratives:** ~6.6M records
-
-### 4. Preprocessing Pipeline
-Performed modular preprocessing via `src/preprocessing.py`:
-- Filtered to target products (strict or expanded mode)
-- Removed rows with empty complaint narratives
-- Cleaned narratives (lowercased, removed boilerplate, stripped special characters)
-- No word count filtering applied (to preserve all potentially useful narratives)
+1. **Chunking** long narratives into manageable segments.
+2. **Embedding** each chunk using a sentence-level transformer model.
+3. **Indexing** the embeddings into a vector database (ChromaDB) for fast similarity search.
 
 ---
 
-## ✅ Outputs
+### 📂 Input & Output
 
-| File | Description |
-|------|-------------|
-| `data/filtered_complaints.csv` | Cleaned data with **strict** product filtering (aligned to business scope) |
-| `data/filtered_complaints_expanded.csv` | Cleaned data with **expanded** product filtering (for broader RAG tuning) |
-| `notebooks/eda_preprocessing.ipynb` | Full EDA and preprocessing workflow (visualizations + processing steps) |
-| `src/preprocessing.py` | Modular preprocessing pipeline supporting filter modes and text cleaning |
+* **Input:** `../data/filtered_complaints.csv` — Cleaned complaints from Task 1.
+* **Output:** Persisted vector index in `../vector_store/chroma_index/`.
 
 ---
 
-## 🧠 Insights
+### 🛠️ Components
 
-- The dataset is heavily skewed toward credit reporting and debt collection categories. These are excluded in strict mode but retained in expanded mode for optional future use.
-- Around 800K to 1.2M usable narratives are preserved after filtering depending on strict or expanded mode.
-- The pipeline is flexible and allows toggling filtering strategies and thresholds for tuning retrieval and generation accuracy in RAG systems.
+#### ✅ Chunking Strategy
+
+* Implemented with `LangChain`'s `RecursiveCharacterTextSplitter`
+* **Chunk Size:** 500 characters
+* **Chunk Overlap:** 50 characters
+
+> This balances information retention and avoids breaking meaning across chunks, which is crucial for high-quality embeddings.
+
+#### ✅ Embedding Model
+
+* Model: `sentence-transformers/all-MiniLM-L6-v2`
+* Justification:
+
+  * Fast and lightweight
+  * Strong performance on semantic similarity tasks
+  * Widely adopted and supported in `sentence-transformers` and LangChain
+
+#### ✅ Vector Store
+
+* Chosen backend: **ChromaDB**
+* Reasons for choosing:
+
+  * Native support in LangChain
+  * Easy to use locally and scalable for future deployment
+  * Supports storing rich metadata for each document
+
+Each chunk is stored with:
+
+* Original `complaint_id`
+* `product` category
+* `chunk_id`
+* Original chunk `text`
 
 ---
 
-## 🗂 Folder Structure
+### 🚀 How to Run
 
+Make sure you’ve installed dependencies:
+
+```bash
+pip install -r requirements.txt
 ```
 
-creditrust-complaint-rag/
-│
-├── data/
-│   ├── complaints.csv                 # Original raw dataset (not tracked in Git)
-│   ├── filtered\_complaints.csv        # Cleaned with strict filtering
-│   └── filtered\_complaints\_expanded.csv # Cleaned with expanded filtering
-│
-├── notebooks/
-│   └── eda\_preprocessing.ipynb        # Interactive analysis + preprocessing
-│
-├── src/
-│   └── preprocessing.py               # Modular data preparation logic
-│
-├── README.md                          # You are here
-└── ...
+Then run the script:
 
+```bash
+python src/chunking_embedding.py
 ```
+
+You will see logs for:
+
+* Loaded complaints
+* Number of generated chunks
+* Embedding progress
+* Indexing progress
+* Final persisted vector store path
 
 ---
 
-## 🔄 Next Steps
+### 📁 Output Directory
 
-- Move to **chunking and embedding** for the cleaned dataset.
-- Tune narrative filters and chunking strategies using applied metrics.
-- Integrate processed data into RAG indexing and retrieval.
+The output vector store is saved to:
 
 ```
+vector_store/chroma_index/
+├── chroma-collections.parquet
+├── chroma-embeddings.parquet
+├── chroma.sqlite3
+...
+```
+
+> ⚠️ This folder is **excluded from Git** via `.gitignore` to avoid pushing large binary files.
+
+---
+
