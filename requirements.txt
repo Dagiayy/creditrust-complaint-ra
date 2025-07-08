@@ -1,3 +1,9 @@
 pandas
 numpy
 matplotlib
+streamlit
+transformers
+torch
+langchain
+chromadb
+sentence-transformers
