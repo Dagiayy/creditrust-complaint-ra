@@ -21,10 +21,11 @@ This project enables intelligent Q\&A over financial complaint narratives filed 
    * Embed using a sentence-level model.
    * Index chunks in a vector store (ChromaDB) with rich metadata.
 
-3. **(Upcoming) Retrieval + LLM Response (Task 3):**
+3. **Retrieval + LLM Response (Task 3):**
 
    * Retrieve relevant complaint chunks using semantic similarity.
-   * Generate user-friendly answers with a Large Language Model.
+   * Generate user-friendly answers with a lightweight local LLM.
+   * Post-process to reduce hallucination and repetition.
 
 ---
 
@@ -32,25 +33,26 @@ This project enables intelligent Q\&A over financial complaint narratives filed 
 
 ```
 creditrust-complaint-ra/
-├── data/                          # Input and output CSV files
-│   ├── complaints.csv             # Raw complaint dataset
-│   ├── filtered_complaints.csv    # Cleaned dataset (strict product filter)
-│   └── filtered_complaints_expanded.csv  # Optional expanded filter output
+├── data/                          
+│   ├── complaints.csv             
+│   ├── filtered_complaints.csv    
+│   └── filtered_complaints_expanded.csv  
 │
-├── notebooks/                     # EDA and preprocessing analysis
-│   └── eda_preprocessing.ipynb    # Task 1: Exploratory notebook
+├── notebooks/                     
+│   └── eda_preprocessing.ipynb    
 │
-├── src/                           # Core processing scripts
-│   ├── preprocessing.py           # Data cleaning and product filtering
-│   └── chunking_embedding.py      # Chunking + embedding + vector store
+├── src/                           
+│   ├── preprocessing.py           
+│   ├── chunking_embedding.py      
+│   └── rag_pipeline.py            # Task 3: Retrieval + LLM-based answering
 │
-├── vector_store/                  # Vector database (excluded from Git)
-│   └── chroma_index/              # ChromaDB persistent index
+├── vector_store/                  
+│   └── chroma_index/              
 │
-├── .gitignore                     # Exclude large or unnecessary files
-├── README.md                      # Project overview (this file)
-├── requirements.txt               # Dependencies
-└── report.md                      # Documentation for each task
+├── .gitignore                     
+├── README.md                      
+├── requirements.txt               
+└── report.md                      
 ```
 
 ---
@@ -66,7 +68,6 @@ pip install -r requirements.txt
 ### 2. Task 1: Data Cleaning & EDA
 
 ```bash
-# Open notebook
 jupyter notebook notebooks/eda_preprocessing.ipynb
 ```
 
@@ -76,9 +77,19 @@ jupyter notebook notebooks/eda_preprocessing.ipynb
 python src/chunking_embedding.py
 ```
 
-Outputs:
+### 4. Task 3: Retrieval + LLM Answering
 
-* `vector_store/chroma_index/`: vector index and metadata
+```bash
+python src/rag_pipeline.py
+```
+
+You’ll be prompted to enter a natural language question like:
+
+```
+What are common issues with student loans?
+```
+
+The system will retrieve relevant complaint excerpts and generate an answer.
 
 ---
 
@@ -87,36 +98,52 @@ Outputs:
 ### ✅ Task 1: Data Preprocessing
 
 * Filtered dataset to key financial products (e.g., Credit Card, BNPL).
-* Optionally expanded filtering to include other valuable categories.
-* Cleaned text narratives (lowercasing, punctuation, empty removals).
-* Visualized product distribution and narrative availability.
+* Optionally expanded filtering to include other categories.
+* Cleaned text (lowercasing, punctuation removal, empty entries).
+* Visualized product distributions.
 
 ### ✅ Task 2: Chunking & Indexing
 
-* Split long narratives into overlapping chunks.
-* Embedded using `all-MiniLM-L6-v2`.
-* Indexed with ChromaDB, including complaint metadata.
+* Split long narratives into overlapping text chunks.
+* Embedded using `sentence-transformers/all-MiniLM-L6-v2`.
+* Persisted vector index with ChromaDB + metadata.
+
+### ✅ Task 3: Retrieval + Generation
+
+* Retrieved top-k relevant complaint chunks using semantic similarity.
+* Used **Falcon-RW-1B** (2.6GB) for local question answering.
+* Applied structured prompts to reduce hallucination.
+* Added post-processing to clean repetitive answers.
 
 ---
 
-## 🤖 Next Steps
+## ⚙️ Lightweight LLM Model Used
 
-* **Task 3:** Implement RAG pipeline:
+* **Model:** `tiiuae/falcon-rw-1b`
+* **Why:** Fast, CPU-friendly, <3GB download, good for offline/local inference
+* **Alternative:** Replace with any `AutoModelForCausalLM`-compatible model (e.g. Mistral, TinyLlama)
 
-  * Retrieve top-k similar complaint chunks.
-  * Generate a response using an LLM (e.g., OpenAI, Mistral, etc.).
-* Add evaluation methods (e.g., retrieval quality, hallucination rate).
+---
+
+## 🧪 Sample Questions to Try
+
+```text
+What are common issues with student loans?
+What complaints relate to identity theft?
+Are there issues related to paying off debt but still being contacted?
+What are the common reasons for loan application rejection?
+```
 
 ---
 
 ## 📦 Dependencies
 
 * `pandas`, `seaborn`, `matplotlib`
-* `langchain`, `sentence-transformers`
-* `chromadb`, `faiss-cpu` (optional if switching back)
-* `scikit-learn`, `tqdm`, `pickle`
+* `langchain`, `sentence-transformers`, `chromadb`
+* `transformers`, `torch`, `scikit-learn`
+* `tqdm`, `pickle`
 
-Install everything:
+Install all with:
 
 ```bash
 pip install -r requirements.txt
@@ -130,10 +157,11 @@ Financial institutions face thousands of customer complaints. RAG enables:
 
 * Faster, context-aware search
 * Insight extraction from noisy narrative data
-* Enhanced customer service with natural language interfaces
+* Enhanced customer service with natural language Q\&A
 
 ---
 
 ## 💬 Contact
 
-Built for internal use at **Kifiya**
+Built for internal use at **Kifiya**.
+
