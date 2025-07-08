@@ -1,7 +1,7 @@
 
 # 📊 Credit Complaint RAG System
 
-An end-to-end pipeline for transforming millions of consumer financial complaints into a **retrieval-augmented generation (RAG)** system using **semantic search** and **LLM-based question answering**.
+An end-to-end pipeline for transforming millions of consumer financial complaints into a **Retrieval-Augmented Generation (RAG)** system using **semantic search**, **vector databases**, and **LLM-based question answering**, accessible via an interactive web interface.
 
 ---
 
@@ -9,23 +9,29 @@ An end-to-end pipeline for transforming millions of consumer financial complaint
 
 This project enables intelligent Q\&A over financial complaint narratives filed by consumers. It follows these key stages:
 
-1. **Data Cleaning & Filtering (Task 1):**
+1. **Task 1 — Data Cleaning & Filtering**
 
-   * Preprocess millions of complaints.
-   * Focus on key financial products.
-   * Explore narrative availability & product distribution.
+   * Preprocess and clean raw complaint data.
+   * Focus on key financial products (e.g., Credit Cards, BNPL).
+   * Explore narrative availability & visualize distribution.
 
-2. **Text Chunking & Vector Indexing (Task 2):**
+2. **Task 2 — Text Chunking & Vector Indexing**
 
-   * Break long narratives into coherent text chunks.
-   * Embed using a sentence-level model.
-   * Index chunks in a vector store (ChromaDB) with rich metadata.
+   * Split narratives into meaningful chunks.
+   * Embed chunks with sentence-level model.
+   * Store in ChromaDB vector database.
 
-3. **Retrieval + LLM Response (Task 3):**
+3. **Task 3 — Retrieval + LLM Response Generation**
 
-   * Retrieve relevant complaint chunks using semantic similarity.
-   * Generate user-friendly answers with a lightweight local LLM.
-   * Post-process to reduce hallucination and repetition.
+   * Use semantic search to retrieve relevant complaints.
+   * Generate answers using a lightweight LLM (Falcon-RW-1B).
+   * Post-process output to reduce hallucination/repetition.
+
+4. **Task 4 — Interactive Chat Interface**
+
+   * Build a web UI with **Streamlit** for non-technical users.
+   * Display both the answer and the supporting complaint excerpts.
+   * Provide clear, minimal, and professional user experience.
 
 ---
 
@@ -33,95 +39,97 @@ This project enables intelligent Q\&A over financial complaint narratives filed 
 
 ```
 creditrust-complaint-ra/
-├── data/                          
-│   ├── complaints.csv             
-│   ├── filtered_complaints.csv    
-│   └── filtered_complaints_expanded.csv  
+├── app.py                        # Task 4: Streamlit chat interface
+├── data/                         # Raw and filtered datasets
+│   ├── complaints.csv
+│   ├── filtered_complaints.csv
+│   └── filtered_complaints_expanded.csv
 │
-├── notebooks/                     
-│   └── eda_preprocessing.ipynb    
+├── notebooks/
+│   └── eda_preprocessing.ipynb  # Task 1: Data cleaning & EDA
 │
-├── src/                           
-│   ├── preprocessing.py           
-│   ├── chunking_embedding.py      
-│   └── rag_pipeline.py            # Task 3: Retrieval + LLM-based answering
+├── screenshots/                 # Screenshots of the final web interface
 │
-├── vector_store/                  
-│   └── chroma_index/              
+├── src/
+│   ├── preprocessing.py         # Task 1 script
+│   ├── chunking_embedding.py    # Task 2 script
+│   └── rag_pipeline.py          # Task 3: CLI-based QA pipeline
 │
-├── .gitignore                     
-├── README.md                      
-├── requirements.txt               
-└── report.md                      
+├── vector_store/                # ChromaDB persistent index (excluded in Git)
+│   └── chroma_index/
+│
+├── .gitignore
+├── README.md                    # This file
+├── report.md                    # Final task report
+└── requirements.txt             # Project dependencies
 ```
 
 ---
 
-## 🚀 How to Run
+## 🚀 How to Run the Project
 
-### 1. Setup Environment
+### 1. ✅ Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Task 1: Data Cleaning & EDA
+> ✅ Ensure you have Python 3.8+ and enough memory (\~3GB RAM minimum for LLM loading).
+
+---
+
+### 2. 📊 Task 1: Data Cleaning & EDA
 
 ```bash
 jupyter notebook notebooks/eda_preprocessing.ipynb
 ```
 
-### 3. Task 2: Chunking + Embedding + Indexing
+---
+
+### 3. 📐 Task 2: Chunking + Embedding + Indexing
 
 ```bash
 python src/chunking_embedding.py
 ```
 
-### 4. Task 3: Retrieval + LLM Answering
+> This creates the Chroma vector store (`vector_store/chroma_index/`).
+
+---
+
+### 4. 🧠 Task 3: Retrieval + Answer Generation (CLI Mode)
 
 ```bash
 python src/rag_pipeline.py
 ```
 
-You’ll be prompted to enter a natural language question like:
+Then type a question like:
 
-```
+```text
 What are common issues with student loans?
 ```
 
-The system will retrieve relevant complaint excerpts and generate an answer.
+The CLI will:
+
+* Retrieve relevant complaint chunks
+* Generate an answer using the LLM
+* Display answer and metadata sources
 
 ---
 
-## 📚 Tasks Completed
+### 5. 💬 Task 4: Web Chat Interface (Recommended)
 
-### ✅ Task 1: Data Preprocessing
+```bash
+streamlit run app.py
+```
 
-* Filtered dataset to key financial products (e.g., Credit Card, BNPL).
-* Optionally expanded filtering to include other categories.
-* Cleaned text (lowercasing, punctuation removal, empty entries).
-* Visualized product distributions.
+This launches a modern web interface where users can:
 
-### ✅ Task 2: Chunking & Indexing
+* Enter questions via a textbox
+* View generated answers
+* See the actual complaint chunks (sources) used for response
+* Reset/clear the session
 
-* Split long narratives into overlapping text chunks.
-* Embedded using `sentence-transformers/all-MiniLM-L6-v2`.
-* Persisted vector index with ChromaDB + metadata.
-
-### ✅ Task 3: Retrieval + Generation
-
-* Retrieved top-k relevant complaint chunks using semantic similarity.
-* Used **Falcon-RW-1B** (2.6GB) for local question answering.
-* Applied structured prompts to reduce hallucination.
-* Added post-processing to clean repetitive answers.
-
----
-
-## ⚙️ Lightweight LLM Model Used
-
-* **Model:** `tiiuae/falcon-rw-1b`
-* **Why:** Fast, CPU-friendly, <3GB download, good for offline/local inference
-* **Alternative:** Replace with any `AutoModelForCausalLM`-compatible model (e.g. Mistral, TinyLlama)
+💡 The UI features a **light dark background** for readability and a professional look.
 
 ---
 
@@ -129,21 +137,53 @@ The system will retrieve relevant complaint excerpts and generate an answer.
 
 ```text
 What are common issues with student loans?
+Why are customers upset even after paying off debt?
 What complaints relate to identity theft?
-Are there issues related to paying off debt but still being contacted?
 What are the common reasons for loan application rejection?
 ```
 
 ---
 
+## 🤖 Model Used
+
+| Attribute    | Value                                                |
+| ------------ | ---------------------------------------------------- |
+| Model        | `tiiuae/falcon-rw-1b` (2.6GB)                        |
+| Framework    | HuggingFace Transformers                             |
+| Why?         | Lightweight, CPU-compatible, offline-ready           |
+| Alternatives | Mistral 7B (if GPU available), TinyLlama, GPTQ, etc. |
+
+---
+
+## 🧠 How It Works
+
+1. **Vector Search:** Uses `all-MiniLM-L6-v2` to convert complaint chunks to dense embeddings.
+2. **ChromaDB:** Stores embeddings and retrieves top-k matches.
+3. **LLM Prompting:** Combines relevant chunks into a prompt for LLM.
+4. **Streaming Answer (in Web UI):** Shows token-by-token output for better UX.
+5. **Source Display:** Always shows which complaint excerpts were used for transparency.
+
+---
+
 ## 📦 Dependencies
 
-* `pandas`, `seaborn`, `matplotlib`
-* `langchain`, `sentence-transformers`, `chromadb`
-* `transformers`, `torch`, `scikit-learn`
-* `tqdm`, `pickle`
+```text
+pandas
+numpy
+matplotlib
+seaborn
+streamlit
+langchain
+sentence-transformers
+chromadb
+transformers
+torch
+scikit-learn
+tqdm
+pickle
+```
 
-Install all with:
+Install via:
 
 ```bash
 pip install -r requirements.txt
@@ -151,17 +191,26 @@ pip install -r requirements.txt
 
 ---
 
+## 📸 Screenshots
+
+All screenshots of the working chatbot interface are saved in the `screenshots/` folder. You can include them in your report or presentation.
+
+---
+
 ## 📌 Why RAG for Complaints?
 
-Financial institutions face thousands of customer complaints. RAG enables:
+Financial service providers face thousands of complex, narrative-heavy complaints. This system:
 
-* Faster, context-aware search
-* Insight extraction from noisy narrative data
-* Enhanced customer service with natural language Q\&A
+* Enables natural language search across complaint data.
+* Helps internal staff, analysts, and QA teams extract insights fast.
+* Builds transparency by showing source excerpts with generated answers.
+* Works offline and respects data privacy.
 
 ---
 
 ## 💬 Contact
 
-Built for internal use at **Kifiya**.
+Built for internal use at **Kifiya Financial Technologies**
+Project Lead: `Dagmawi Ayenew`
+Mentor: `Kifiya AI Research Team`
 
