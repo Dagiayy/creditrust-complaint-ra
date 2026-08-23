@@ -1,216 +1,262 @@
+# CrediTrust Complaint RAG
 
-# 📊 Credit Complaint RAG System
+Retrieval-Augmented Generation over consumer financial complaint narratives —
+ask a natural-language question, get an answer grounded in real CFPB
+complaints plus the exact excerpts it was drawn from.
 
-An end-to-end pipeline for transforming millions of consumer financial complaints into a **Retrieval-Augmented Generation (RAG)** system using **semantic search**, **vector databases**, and **LLM-based question answering**, accessible via an interactive web interface.
+## 1. What this is and why it exists
 
----
+Financial institutions receive thousands of free-text complaint narratives.
+Reading them one by one to spot emerging problems (e.g. "what's going wrong
+with BNPL right now?") doesn't scale. This system lets an analyst, QA lead,
+or operations manager ask a question in plain English and get:
 
-## 📌 Overview
+- a concise, **grounded** answer (the LLM is instructed to answer only from
+  retrieved complaint text, and the pipeline refuses to answer at all if
+  retrieval didn't return enough relevant context — see
+  [`src/creditrust/rag/pipeline.py`](src/creditrust/rag/pipeline.py))
+- the **source excerpts** used to produce that answer, with complaint ID and
+  product, for auditability
 
-This project enables intelligent Q\&A over financial complaint narratives filed by consumers. It follows these key stages:
+It runs fully offline/on-prem (local embedding model + local LLM), which
+matters for data that may be sensitive.
 
-1. **Task 1 — Data Cleaning & Filtering**
-
-   * Preprocess and clean raw complaint data.
-   * Focus on key financial products (e.g., Credit Cards, BNPL).
-   * Explore narrative availability & visualize distribution.
-
-2. **Task 2 — Text Chunking & Vector Indexing**
-
-   * Split narratives into meaningful chunks.
-   * Embed chunks with sentence-level model.
-   * Store in ChromaDB vector database.
-
-3. **Task 3 — Retrieval + LLM Response Generation**
-
-   * Use semantic search to retrieve relevant complaints.
-   * Generate answers using a lightweight LLM (Falcon-RW-1B).
-   * Post-process output to reduce hallucination/repetition.
-
-4. **Task 4 — Interactive Chat Interface**
-
-   * Build a web UI with **Streamlit** for non-technical users.
-   * Display both the answer and the supporting complaint excerpts.
-   * Provide clear, minimal, and professional user experience.
-
----
-
-## 📁 Project Structure
+## 2. Architecture
 
 ```
-creditrust-complaint-ra/
-├── app.py                        # Task 4: Streamlit chat interface
-├── data/                         # Raw and filtered datasets
-│   ├── complaints.csv
-│   ├── filtered_complaints.csv
-│   └── filtered_complaints_expanded.csv
-│
-├── notebooks/
-│   └── eda_preprocessing.ipynb  # Task 1: Data cleaning & EDA
-│
-├── screenshots/                 # Screenshots of the final web interface
-│
-├── src/
-│   ├── preprocessing.py         # Task 1 script
-│   ├── chunking_embedding.py    # Task 2 script
-│   └── rag_pipeline.py          # Task 3: CLI-based QA pipeline
-│
-├── vector_store/                # ChromaDB persistent index (excluded in Git)
-│   └── chroma_index/
-│
-├── .gitignore
-├── README.md                    # This file
-├── report.md                    # Final task report
-└── requirements.txt             # Project dependencies
+CFPB CSV export
+      │  (Extract)
+      ▼
+┌─────────────────────┐
+│ data/validation.py   │  schema check, null/duplicate rate, quality report
+└─────────┬────────────┘
+          │ (Validate)
+          ▼
+┌─────────────────────┐
+│ data/preprocessing.py│  product filter → dedupe → clean text
+└─────────┬────────────┘
+          │ (Transform, Load → filtered_complaints.csv)
+          ▼
+┌─────────────────────┐
+│ embeddings/chunking.py│  RecursiveCharacterTextSplitter
+│ embeddings/indexer.py │  sentence-transformers/all-MiniLM-L6-v2 → Chroma
+└─────────┬────────────┘
+          ▼
+   vector_store/chroma_index/  (persisted)
+          │
+          ▼
+┌─────────────────────┐        ┌────────────────┐
+│ rag/retriever.py     │──────▶│ rag/pipeline.py  │──answer + sources──▶  app.py (Streamlit)
+│ rag/llm.py            │──────▶│  RAGPipeline.ask()│                    api/main.py (FastAPI)
+└─────────────────────┘        └────────────────┘
 ```
 
----
+One `RAGPipeline` implementation is shared by the CLI, the API, and the
+Streamlit UI — there is exactly one place retrieval/generation logic lives.
+Everything below it (retriever, LLM) is injected, which is what makes it
+testable without downloading model weights (`tests/test_rag_pipeline.py`
+uses fakes).
 
-## 🚀 How to Run the Project
+### Package layout
 
-### 1. ✅ Install Dependencies
+```
+src/creditrust/
+├── config.py            # env-driven Settings, all paths anchored to project root
+├── logging_config.py    # structured logging (console + file)
+├── data/
+│   ├── preprocessing.py # filter / dedupe / clean
+│   └── validation.py    # schema + data-quality checks
+├── embeddings/
+│   ├── chunking.py      # text splitting + metadata sanitization
+│   └── indexer.py       # embed + persist to Chroma
+├── rag/
+│   ├── llm.py            # LLMProvider abstraction (local HF model | mock)
+│   ├── retriever.py       # Chroma retriever construction
+│   ├── prompts.py         # prompt template + "insufficient context" guardrail
+│   └── pipeline.py        # RAGPipeline: retrieve → prompt → generate
+└── api/
+    ├── main.py            # FastAPI service
+    └── schemas.py         # request/response models
+
+scripts/
+├── run_pipeline.py         # CLI: preprocess | index | all | ask
+└── evaluate_retrieval.py   # retrieval hit-rate@k eval harness
+
+app.py                      # Streamlit UI (presentation only)
+tests/                      # pytest — unit tests, no model downloads required
+notebooks/eda_preprocessing.ipynb   # EDA, calls into src/creditrust/data
+```
+
+## 3. Technologies and why
+
+| Layer | Choice | Why |
+|---|---|---|
+| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` | Small (~90MB), fast on CPU, strong quality/cost tradeoff for semantic search. |
+| Vector store | ChromaDB | Embedded, zero-ops, persists to disk — no separate DB service to run for a single-node RAG workload. |
+| LLM | Configurable local HF model (default `Qwen/Qwen2.5-0.5B-Instruct`) | Instruction-tuned, small enough for CPU inference, offline-capable. Swappable via `CREDITRUST_LLM_MODEL_NAME` without code changes. |
+| Chunking | LangChain `RecursiveCharacterTextSplitter` | Battle-tested recursive splitting with configurable overlap; avoided pulling in the rest of a LangChain agent stack. |
+| API | FastAPI | Typed request/response models, auto-generated OpenAPI docs, async-ready. |
+| UI | Streamlit | Fastest path to a usable internal tool for non-technical staff. |
+
+No Airflow/Dagster/Kafka/Spark/vector-DB-as-a-service, and no
+microservices split beyond API/UI — the data volume and single-node
+deployment target don't justify that complexity (see `UPGRADE.md` §21 for
+the explicit reasoning).
+
+## 4. Installation
 
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt   # includes runtime deps + pytest/ruff/black
+cp .env.example .env                  # optional — defaults work out of the box
 ```
 
-> ✅ Ensure you have Python 3.8+ and enough memory (\~3GB RAM minimum for LLM loading).
+Requires Python 3.10+. See `data/README.md` for obtaining the raw dataset.
 
----
-
-### 2. 📊 Task 1: Data Cleaning & EDA
+## 5. Running the pipeline
 
 ```bash
-jupyter notebook notebooks/eda_preprocessing.ipynb
+# 1. Clean/filter the raw CFPB export (data/complaints.csv -> data/filtered_complaints.csv)
+python scripts/run_pipeline.py preprocess
+
+# 2. Chunk, embed, and index into ChromaDB
+python scripts/run_pipeline.py index
+
+# ...or both in one shot
+python scripts/run_pipeline.py all
+
+# Quick CLI smoke test
+python scripts/run_pipeline.py ask "What are common issues with student loans?"
 ```
 
----
+Every run is logged to `logs/pipeline_runs.jsonl` (stage, row counts,
+duration, success/failure) and `preprocess` is idempotent — it skips work if
+`filtered_complaints.csv` already exists (`--force` to rebuild).
 
-### 3. 📐 Task 2: Chunking + Embedding + Indexing
+## 6. Running the applications
 
 ```bash
-python src/chunking_embedding.py
-```
-
-> This creates the Chroma vector store (`vector_store/chroma_index/`).
-
----
-
-### 4. 🧠 Task 3: Retrieval + Answer Generation (CLI Mode)
-
-```bash
-python src/rag_pipeline.py
-```
-
-Then type a question like:
-
-```text
-What are common issues with student loans?
-```
-
-The CLI will:
-
-* Retrieve relevant complaint chunks
-* Generate an answer using the LLM
-* Display answer and metadata sources
-
----
-
-### 5. 💬 Task 4: Web Chat Interface (Recommended)
-
-```bash
+# Web UI
 streamlit run app.py
+
+# API (OpenAPI docs at /docs)
+uvicorn creditrust.api.main:app --reload
+curl -X POST localhost:8000/api/v1/query -H "Content-Type: application/json" \
+     -d '{"question": "Why are customers upset even after paying off debt?"}'
 ```
 
-This launches a modern web interface where users can:
+Both require the vector index to exist (step 5) — they fail fast with an
+actionable error message (not a stack trace) if it doesn't.
 
-* Enter questions via a textbox
-* View generated answers
-* See the actual complaint chunks (sources) used for response
-* Reset/clear the session
-
-💡 The UI features a **light dark background** for readability and a professional look.
-
----
-
-## 🧪 Sample Questions to Try
-
-```text
-What are common issues with student loans?
-Why are customers upset even after paying off debt?
-What complaints relate to identity theft?
-What are the common reasons for loan application rejection?
-```
-
----
-
-## 🤖 Model Used
-
-| Attribute    | Value                                                |
-| ------------ | ---------------------------------------------------- |
-| Model        | `tiiuae/falcon-rw-1b` (2.6GB)                        |
-| Framework    | HuggingFace Transformers                             |
-| Why?         | Lightweight, CPU-compatible, offline-ready           |
-| Alternatives | Mistral 7B (if GPU available), TinyLlama, GPTQ, etc. |
-
----
-
-## 🧠 How It Works
-
-1. **Vector Search:** Uses `all-MiniLM-L6-v2` to convert complaint chunks to dense embeddings.
-2. **ChromaDB:** Stores embeddings and retrieves top-k matches.
-3. **LLM Prompting:** Combines relevant chunks into a prompt for LLM.
-4. **Streaming Answer (in Web UI):** Shows token-by-token output for better UX.
-5. **Source Display:** Always shows which complaint excerpts were used for transparency.
-
----
-
-## 📦 Dependencies
-
-```text
-pandas
-numpy
-matplotlib
-seaborn
-streamlit
-langchain
-sentence-transformers
-chromadb
-transformers
-torch
-scikit-learn
-tqdm
-pickle
-```
-
-Install via:
+### Docker
 
 ```bash
-pip install -r requirements.txt
+docker compose up --build
+# API:  http://localhost:8000/docs
+# UI:   http://localhost:8501
 ```
 
+`data/`, `vector_store/`, and `logs/` are bind-mounted so the index survives
+container restarts and can be built once, outside Docker, and reused.
+
+## 7. Configuration
+
+All configuration is environment-driven (`src/creditrust/config.py`, backed
+by `pydantic-settings`) — see `.env.example` for the full list. Highlights:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CREDITRUST_FILTER_MODE` | `strict` | `strict` \| `expanded` \| `all` product filtering |
+| `CREDITRUST_LLM_PROVIDER` | `local` | `local` (real HF model) \| `mock` (canned responses, used in tests) |
+| `CREDITRUST_LLM_MODEL_NAME` | `Qwen/Qwen2.5-0.5B-Instruct` | Any HF causal-LM repo id |
+| `CREDITRUST_TOP_K` | `5` | Chunks retrieved per query |
+| `CREDITRUST_API_KEY` | unset | If set, `X-API-Key` header required on `/api/v1/*` |
+
+No secrets are hard-coded anywhere in the codebase; `CREDITRUST_HF_TOKEN` is
+only needed for gated HF models.
+
+## 8. Testing
+
+```bash
+pytest                          # unit tests — no model downloads, run in <10s
+pytest --cov=creditrust         # with coverage
+ruff check src scripts tests app.py
+black --check src scripts tests app.py
+```
+
+The suite covers preprocessing/dedup/cleaning logic, data-quality
+validation, chunking + metadata sanitization, config resolution (including
+the path-anchoring fix — see `UPGRADE.md`), the RAG pipeline's context
+guardrail (via fake retriever/LLM, no network), and the FastAPI routes
+(health, auth, 503-when-not-ready) via `TestClient`. CI runs the full suite
+with `CREDITRUST_LLM_PROVIDER=mock` on every push.
+
+## 9. Example workflow
+
+1. Ops analyst opens the Streamlit UI, asks *"What complaints relate to
+   identity theft?"*
+2. `RAGPipeline.ask()` embeds the question, retrieves the top-k most similar
+   complaint chunks from Chroma.
+3. If total retrieved context is too short to be useful, the pipeline
+   returns a fixed "not enough information" answer instead of letting the
+   LLM guess — this is deliberate: hallucinated financial-complaint claims
+   are worse than an honest "I don't know."
+4. Otherwise, the LLM summarizes the retrieved excerpts into a grounded
+   3–4 sentence answer.
+5. The UI shows the answer plus every source excerpt (complaint ID +
+   product), so the analyst can verify the claim against the original text.
+
+## 10. Deployment
+
+- `Dockerfile` builds one image; `docker-compose.yml` runs it twice (API +
+  UI) with shared data/vector-store/log volumes.
+- `.github/workflows/ci.yml` lints (ruff), format-checks (black), and runs
+  the unit test suite (mocked LLM, no downloads) on every push/PR.
+- Health checks: `GET /health` reports `vector_store_ready` and the active
+  `llm_provider` so an orchestrator can gate traffic until the index exists.
+
+## 11. Monitoring / observability
+
+- Structured logs to console + `logs/app.log` (`CREDITRUST_LOG_JSON=true`
+  for machine-parseable logs).
+- `logs/pipeline_runs.jsonl` — an append-only run history: what stage ran,
+  when, row counts in/out, duration, success/failure.
+- `RAGAnswer.latency_seconds` on every query, surfaced in the UI and logged
+  server-side, to track end-to-end response time.
+- `scripts/evaluate_retrieval.py` — a repeatable retrieval hit-rate@k check
+  against a small labeled query set, so a regression in retrieval quality
+  after a model/config change shows up as a number, not a vibe.
+
+## 12. Project structure
+
+See §2 above.
+
+## 13. Limitations
+
+- **No labeled relevance judgments.** The retrieval eval
+  (`scripts/evaluate_retrieval.py`) uses a product-match proxy for
+  relevance, not human-graded qrels — good for catching regressions, not
+  for an absolute quality number.
+- **Small default LLM.** `Qwen2.5-0.5B-Instruct` runs on CPU but is not as
+  capable as a larger hosted model; `CREDITRUST_LLM_MODEL_NAME` is the knob
+  to reach for if better answer quality is worth the extra latency/memory.
+- **No authentication beyond a single static API key.** Fine for an
+  internal tool behind a VPN/reverse proxy; not a substitute for real
+  user-level auth/RBAC in a multi-tenant deployment.
+- **No automatic drift/quality monitoring in production** — latency is
+  logged, but nothing pages anyone if answer quality silently degrades.
+
+## 14. Future improvements
+
+- Human-labeled relevance/answer-quality eval set + periodic scoring.
+- Hybrid (keyword + vector) retrieval for queries with specific terms
+  (account numbers, exact product names) that pure semantic search can miss.
+- Swap the static API key for real auth (OAuth2/JWT) if this moves beyond
+  an internal tool.
+- Incremental indexing (only embed new/changed complaints) instead of a
+  full rebuild, once complaint volume makes that worthwhile.
+
 ---
-
-## 📸 Screenshots
-
-All screenshots of the working chatbot interface are saved in the `screenshots/` folder. You can include them in your report or presentation.
-
----
-
-## 📌 Why RAG for Complaints?
-
-Financial service providers face thousands of complex, narrative-heavy complaints. This system:
-
-* Enables natural language search across complaint data.
-* Helps internal staff, analysts, and QA teams extract insights fast.
-* Builds transparency by showing source excerpts with generated answers.
-* Works offline and respects data privacy.
-
----
-
-## 💬 Contact
-
-Built for internal use at **Kifiya Financial Technologies**
-Project Lead: `Dagmawi Ayenew`
-Mentor: `Kifiya AI Research Team`
-
+See [`UPGRADE.md`](UPGRADE.md) for the full audit findings and everything
+changed from the original prototype.
