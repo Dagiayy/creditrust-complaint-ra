@@ -1,0 +1,33 @@
+services:
+  api:
+    build: .
+    image: creditrust-rag:latest
+    command: ["uvicorn", "creditrust.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./vector_store:/app/vector_store
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  ui:
+    build: .
+    image: creditrust-rag:latest
+    command: ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./vector_store:/app/vector_store
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    depends_on:
+      - api
