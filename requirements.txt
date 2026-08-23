@@ -1,9 +1,29 @@
-pandas
-numpy
-matplotlib
-streamlit
-transformers
-torch
-langchain
-chromadb
-sentence-transformers
+# --- Data / analysis -------------------------------------------------------
+pandas>=2.2
+numpy>=1.26
+
+# --- Config / validation ------------------------------------------------------
+pydantic>=2.7
+pydantic-settings>=2.3
+python-dotenv>=1.0
+
+# --- Embeddings / vector store / RAG orchestration --------------------------
+sentence-transformers>=3.0
+chromadb>=0.5
+langchain>=0.3
+langchain-community>=0.3
+langchain-huggingface>=0.1
+langchain-chroma>=0.2
+langchain-text-splitters>=0.3
+
+# --- LLM runtime -------------------------------------------------------------
+transformers>=4.44
+torch>=2.3
+
+# --- Interfaces ----------------------------------------------------------------
+streamlit>=1.35
+fastapi>=0.111
+uvicorn[standard]>=0.30
+
+# --- Utilities -----------------------------------------------------------------
+tqdm>=4.66
