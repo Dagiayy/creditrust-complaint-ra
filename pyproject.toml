@@ -1,8 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "creditrust-complaint-rag"
 version = "2.0.0"
 description = "Retrieval-Augmented Generation system over CFPB consumer financial complaint narratives."
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Dagmawi Ayenew", email = "ayenewdagmawi@gmail.com" }
+]
 requires-python = ">=3.10"
+urls = { Repository = "https://github.com/Dagiayy/creditrust-complaint-ra.git" }
+
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
